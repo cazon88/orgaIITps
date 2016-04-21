@@ -47,25 +47,52 @@ pand xmm2, [quitarBasura] ; XMM2 = [ 00 | 00 | 00 | R1 | 00 | 00 | 00 | R2 | 00 
 paddd xmm0, xmm1    	 ; sumo SIN saturacion
 paddd xmm0, xmm2
 
-; XMM0 = [ S1 | S2 | S3 | S4 ]
+; quizas hubo un overflow y me piso el byte de la izquierda, pero estoy seguro de que mas que eso no va a pisar
+; XMM0 = [ 00 | S1 | 00 | S2 | 00 | S3 | 00 | S4 ]
 
 movdqu xmm3, xmm0
 movdqu xmm4, xmm0
 movdqu xmm5, xmm0
-movdqu xmm6, xmm0
-movdqu xmm7, xmm0
-movdqu xmm8, xmm0
 
-; XMM0 = XMM(3..7) = [ 0 | 0 | 0 | S1 | 0 | 0 | 0 | S2 | 0 | 0 | 0 | S3 | 0 | 0 | 0 | S4 ]
+; XMM0 = XMM(3..5) = [ 00 | S1 | 00 | S2 | 00 | S3 | 00 | S4 ]
 
-pmullw xmm3, [multB]
-pmulhw xmm4, [multB]
+mulps xmm3, [multB]
+mulps xmm4, [multG]
+mulps xmm5, [multR]
 
-pmullw xmm5, [multR]
-pmulhw xmm6, [multR]
+; XMM3 = [ S1*0.2 | S2*0.2 | S3*0.2 | S4*0.2 ] 
+; XMM4 = [ S1*0.3 | S2*0.3 | S3*0.3 | S4*0.3 ]
+; XMM5 = [ S1*0.5 | S2*0.5 | S3*0.5 | S4*0.5 ]
 
-pmullw xmm7, [multG]
-pmulhw xmm8, [multG]
+;luego de estos registros puedo extrar valor a valor con PEXTRD (que me saca la double word
+;menos significativa y la deja en un registro). En ese registro podria redondearlo con ROUNDPS
+;(toma dos parametros y una constante, cte=2 asi redondea hacia arriba), luego ver si se paso 
+;de 255 y a base de eso escribirlo en la memoria, pero deberia ir uno por uno comparando (es malo?)
+;si lo redondeo que pasa? como me quedan los bytes?
+;si redondea bien deberia quedar 
+; XMM3 = [ 00 | 00 | 00 | B1 | 00 | 00 | 00 | B2 | 00 | 00 | 00 | B3 | 00 | 00 | 00 | B4 ]
+
+pop r15
+pop rbx
+pop rbp
+ret
+
+;CODIGO VIEJO:
+;movdqu xmm3, xmm0
+;movdqu xmm4, xmm0
+;movdqu xmm5, xmm0
+;movdqu xmm6, xmm0
+;movdqu xmm7, xmm0
+;movdqu xmm8, xmm0
+
+;pmullw xmm3, [multB]
+;pmulhw xmm4, [multB]
+
+;pmullw xmm5, [multR]
+;pmulhw xmm6, [multR]
+
+;pmullw xmm7, [multG]
+;pmulhw xmm8, [multG]
 
 ; XMM3 = BL
 ; XMM4 = BH
@@ -80,12 +107,3 @@ pmulhw xmm8, [multG]
 ; XMM6 = [ S1B | S2B ]
 ; XMM7 = [ S1B | S2B ]
 ; XMM8 = [ S1B | S2B ]
-
-
-;tiene que haber alguna forma mas eficiente de hacerlo
-;¿como elijo los resultados (partes de registros xmm) que quiero pasarle a destination?
-
-pop r15
-pop rbx
-pop rbp
-ret
