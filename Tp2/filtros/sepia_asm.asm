@@ -2,11 +2,11 @@ section .data
 DEFAULT REL
 
 section .rodata
-quitarBasura:
-saturacion: db 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF
-multB: dw 0.2, 0.2, 0.2, 0.2
-multG: dw 0.3, 0.3, 0.3, 0.3
-multR: dw 0.5, 0.5, 0.5, 0.5
+saturacion:
+quitarBasura: db 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00
+multB: dd 0.2, 0.2, 0.2, 0.2
+multG: dd 0.3, 0.3, 0.3, 0.3
+multR: dd 0.5, 0.5, 0.5, 0.5
 
 section .text
 global sepia_asm
@@ -25,41 +25,51 @@ push rbp ;alineada
 mov rbp, rsp
 push r12 ;desalinada
 push r13 ;alineada
-
-xor r10, r10; voy a guardar el corrimiento de la memoria
 xor r12, r12; voy a guardar X
 xor r13, r13; voy a guardar Y
  
-cicloY:
+movdqu xmm12, [multB]
+movdqu xmm13, [multG]
+movdqu xmm14, [multR]
+movdqu xmm15, [quitarBasura]
+jmp .cicloX
 
-cicloX:
-movdqu xmm0, [rdi + r10] ; XMM0 = [ B1 | G1 | R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 | R4 | A4 ]
+.cicloY:
+xor r12, r12
+add r13, 1
+cmp r13, rcx
+je .terminar
+jmp .cicloX
+
+.cicloX:
+movdqu xmm0, [rdi] 		 ; XMM0 = [ B1 | G1 | R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 | R4 | A4 ]
 movdqu xmm1, xmm0
-movdqu xmm2, xmm1
-movdqu xmm9, xmm1		 ; save
-psrldq xmm0, 3			 ; XMM0 = [ 00 | 00 | 00 | B1 | G1 | R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 ]
-psrldq xmm1, 2			 ; XMM1 = [ 00 | 00 | B1 | G1 | R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 ]
-psrldq xmm2, 1			 ; XMM2 = [ 00 | B1 | G1 | R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 | R4 ]
+movdqu xmm2, xmm0
+movdqu xmm9, xmm0		 ; save
+psrldq xmm1, 1			 ; XMM1 = [ G1 | R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 | R4 | A4 | 00 ]
+psrldq xmm2, 2			 ; XMM2 = [ R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 | R4 | A4 | 00 | 00 ]
+psrldq xmm9, 3			 ; XMM3 = [ A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 | R4 | A4 | 00 | 00 | 00 ]
 
-pand xmm0, [quitarBasura] ; XMM0 = [ 00 | 00 | 00 | B1 | 00 | 00 | 00 | B2 | 00 | 00 | 00 | B3 | 00 | 00 | 00 | B4 ]
-pand xmm1, [quitarBasura] ; XMM1 = [ 00 | 00 | 00 | G1 | 00 | 00 | 00 | G2 | 00 | 00 | 00 | G3 | 00 | 00 | 00 | G4 ]
-pand xmm2, [quitarBasura] ; XMM2 = [ 00 | 00 | 00 | R1 | 00 | 00 | 00 | R2 | 00 | 00 | 00 | R3 | 00 | 00 | 00 | R4 ]
+pand xmm0, xmm15 ; XMM0 = [ B1 | 00 | 00 | 00 | B2 | 00 | 00 | 00 | B3 | 00 | 00 | 00 | B4 | 00 | 00 | 00 ]
+pand xmm1, xmm15 ; XMM1 = [ G1 | 00 | 00 | 00 | G2 | 00 | 00 | 00 | G3 | 00 | 00 | 00 | G4 | 00 | 00 | 00 ]
+pand xmm2, xmm15 ; XMM2 = [ R1 | 00 | 00 | 00 | R2 | 00 | 00 | 00 | R3 | 00 | 00 | 00 | R4 | 00 | 00 | 00 ]
 
 paddd xmm0, xmm1    	 ; sumo SIN saturacion
 paddd xmm0, xmm2
-
-; quizas hubo un overflow y me piso el byte de la izquierda, pero estoy seguro de que mas que eso no va a pisar
-; XMM0 = [ 00 | S1 | 00 | S2 | 00 | S3 | 00 | S4 ]
 
 movdqu xmm3, xmm0
 movdqu xmm4, xmm0
 movdqu xmm5, xmm0
 
+cvtdq2ps xmm3, xmm3  ;los convierto en floats
+cvtdq2ps xmm4, xmm4
+cvtdq2ps xmm5, xmm5
+
 ; XMM0 = XMM(3..5) = [ S1 | S2 | S3 | S4 ]
 
-mulps xmm3, [multB]
-mulps xmm4, [multG]
-mulps xmm5, [multR]
+mulps xmm3, xmm12 ; xmm12 = multB
+mulps xmm4, xmm13 ; xmm13 = multG
+mulps xmm5, xmm14 ; xmm14 = multR
 
 ; XMM3 = [ S1*0.2 | S2*0.2 | S3*0.2 | S4*0.2 ] con floats
 ; XMM4 = [ S1*0.3 | S2*0.3 | S3*0.3 | S4*0.3 ]
@@ -77,15 +87,53 @@ movdqu xmm5, xmm8
 ; XMM4 = XMM7 = [ S1*0.3 | S2*0.3 | S3*0.3 | S4*0.3 ]
 ; XMM5 = XMM8 = [ S1*0.5 | S2*0.5 | S3*0.5 | S4*0.5 ]
 
-pcmpgtd xmm6, [saturacion]
-pcmpgtd xmm7, [saturacion]
-pcmpgtd xmm8, [saturacion]
+;BREAKPOINT1
+
+pcmpgtd xmm6, xmm15 ; xmm15 = saturacion
+pcmpgtd xmm7, xmm15 ; xmm15 = saturacion
+pcmpgtd xmm8, xmm15 ; xmm15 = saturacion
 
 por xmm3, xmm6
 por xmm4, xmm7
 por xmm5, xmm8
 
-;AHORA HAY QUE HACER CORRIMIENTOS A LOS REGISTROS, LOS SUMO Y ASI PASO DE UNA VEZ SOLA A MEMORIA LOS CUATRO PIXELES
+pand xmm9, xmm15 ; xmm15 = quitarBasura
+pand xmm3, xmm15
+pand xmm4, xmm15
+pand xmm5, xmm15
+
+; XMM3 = [ R1 | 00 | 00 | 00 | R2 | 00 | 00 | 00 | R3 | 00 | 00 | 00 | R4 | 00 | 00 | 00 ]
+; XMM4 = [ G1 | 00 | 00 | 00 | G2 | 00 | 00 | 00 | G3 | 00 | 00 | 00 | G4 | 00 | 00 | 00 ]
+; XMM5 = [ B1 | 00 | 00 | 00 | B2 | 00 | 00 | 00 | B3 | 00 | 00 | 00 | B4 | 00 | 00 | 00 ]
+; XMM9 = [ A1 | 00 | 00 | 00 | A2 | 00 | 00 | 00 | A3 | 00 | 00 | 00 | A4 | 00 | 00 | 00 ]
+
+;BREAKPOINT2
+
+pslldq xmm4, 1
+pslldq xmm5, 2
+pslldq xmm9, 3
+
+paddd xmm9, xmm3
+paddd xmm9, xmm4
+paddd xmm9, xmm5
+
+; XMM4 = [ B1 | G1 | R1 | A1 | B2 | G2 | R2 | A2 | B3 | G3 | R3 | A3 | B4 | G4 | R4 | A4 ]
+
+movdqu [rsi], xmm9
+lea rsi, [rsi + 16]
+lea rdi, [rdi + 16]
+add r12, 4
+cmp r12, rdx ;comparo para ver si ya termine esta fila
+je .cicloY
+jmp .cicloX
+
+.terminar:
+pop r13
+pop r12
+pop rbp
+ret
+
+;CODIGO VIEJO:
 
 ;luego de estos registros puedo extrar valor a valor con PEXTRD (que me saca la double word
 ;menos significativa y la deja en un registro). 
@@ -93,14 +141,6 @@ por xmm5, xmm8
 ;(toma dos parametros y una constante, cte=2 asi redondea hacia arriba), luego ver si se paso 
 ;de 255 y a base de eso escribirlo en la memoria, pero deberia ir uno por uno comparando (es malo?)
 
-
-
-pop r15
-pop rbx
-pop rbp
-ret
-
-;CODIGO VIEJO:
 ;movdqu xmm3, xmm0
 ;movdqu xmm4, xmm0
 ;movdqu xmm5, xmm0
@@ -131,15 +171,69 @@ ret
 ; XMM7 = [ S1B | S2B ]
 ; XMM8 = [ S1B | S2B ]
 
-
 ;POSIBILIDADES:
 ;ALGO QUE MULTIPLIQUE Y YA ME LO DEJE DE TAMAÑO 1B
 ;EXTRACTPS
 ;
 ;CVTPS2DQ
 
-
-
-
 ;EXPERIMENTO POSIBLE:
 ;USAR PACKSSWB Y PACKUSWB, 
+
+;OTRO EXPERIMENTO POSIBLE:
+;CAMBIAR DE LUGAR LOS ACCESOS A MEMORIA QUE ESTAN ANTES DE CICLOY Y PONERLOS DENTRO DEL CICLO, PARA VER QUE TAN CARO ES ACCEDER A MEMORIA
+
+
+
+
+
+
+
+; MAS CODIGO VIEJO
+; XMM0 = XMM(3..5) = [ S1 | S2 | S3 | S4 ]
+
+;mulps xmm3, xmm12 ; xmm12 = multB
+;mulps xmm4, xmm13 ; xmm13 = multG
+;mulps xmm5, xmm14 ; xmm14 = multR
+
+; XMM3 = [ S1*0.2 | S2*0.2 | S3*0.2 | S4*0.2 ] con floats
+; XMM4 = [ S1*0.3 | S2*0.3 | S3*0.3 | S4*0.3 ]
+; XMM5 = [ S1*0.5 | S2*0.5 | S3*0.5 | S4*0.5 ]
+
+;cvtps2dq xmm6, xmm3 ;paso de float a integer
+;cvtps2dq xmm7, xmm4
+;cvtps2dq xmm8, xmm5
+
+;movdqu xmm3, xmm6
+;movdqu xmm4, xmm7
+;movdqu xmm5, xmm8
+
+; XMM3 = XMM6 = [ S1*0.2 | S2*0.2 | S3*0.2 | S4*0.2 ] con integers
+; XMM4 = XMM7 = [ S1*0.3 | S2*0.3 | S3*0.3 | S4*0.3 ]
+; XMM5 = XMM8 = [ S1*0.5 | S2*0.5 | S3*0.5 | S4*0.5 ]
+
+;BREAKPOINT1
+
+;pcmpgtd xmm6, xmm15 ; xmm15 = saturacion
+;pcmpgtd xmm7, xmm15 ; xmm15 = saturacion
+;pcmpgtd xmm8, xmm15 ; xmm15 = saturacion
+
+;por xmm3, xmm6
+;por xmm4, xmm7
+;por xmm5, xmm8
+
+;pand xmm9, xmm15 ; xmm15 = quitarBasura
+;pand xmm3, xmm15
+;pand xmm4, xmm15
+;pand xmm5, xmm15
+
+; XMM3 = [ R1 | 00 | 00 | 00 | R2 | 00 | 00 | 00 | R3 | 00 | 00 | 00 | R4 | 00 | 00 | 00 ]
+; XMM4 = [ G1 | 00 | 00 | 00 | G2 | 00 | 00 | 00 | G3 | 00 | 00 | 00 | G4 | 00 | 00 | 00 ]
+; XMM5 = [ B1 | 00 | 00 | 00 | B2 | 00 | 00 | 00 | B3 | 00 | 00 | 00 | B4 | 00 | 00 | 00 ]
+; XMM9 = [ A1 | 00 | 00 | 00 | A2 | 00 | 00 | 00 | A3 | 00 | 00 | 00 | A4 | 00 | 00 | 00 ]
+
+;BREAKPOINT2
+
+;pslldq xmm4, 1
+;pslldq xmm5, 2
+;pslldq xmm9, 3
